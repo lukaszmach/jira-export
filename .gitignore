@@ -1,0 +1,5 @@
+# ignore TEST files
+EXPORT/
+
+# ignore settings
+settings*
