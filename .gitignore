@@ -3,3 +3,7 @@ EXPORT/
 
 # ignore settings
 settings*
+
+# ignore build
+build
+*.spec
