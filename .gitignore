@@ -7,3 +7,6 @@ settings*
 # ignore build
 build
 *.spec
+
+#ignore cache files
+__pycache__
