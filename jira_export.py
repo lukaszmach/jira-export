@@ -1,11 +1,13 @@
 import configparser
 import keyboard
 from os import getcwd, path, mkdir
+import re
 import socket
 import sys
 
 from jira import JIRA, client, resources
 from jira.exceptions import JIRAError
+
 from pdfkit import from_string
 import pypandoc
 
@@ -32,6 +34,7 @@ def is_server_reachable(server_url: str) -> None:
 def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigParser:
     '''Validates settings.ini (loaded ConfigParser object), checks if all required fields are prsent, add missing entries and returns ConfigParser object'''
 
+    # Creating default settings structure
     config_default = configparser.ConfigParser()
     config_default['JIRA_ACCESS'] = {'jira_base_url': 'https://your_jira_instance/',
                                      'jira_username': 'your_jira@username',
@@ -41,37 +44,7 @@ def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigP
                                         'save_to_pdf': True}
     config_default['ISSUE_FILTER'] = {'jira_project': "TEST"}
 
-    # if not config.has_section('JIRA_ACCESS'):
-    #     config.add_section('JIRA_ACCESS')
-
-    # if not config.has_option('JIRA_ACCESS', 'jira_base_url'):
-    #     config.set('JIRA_ACCESS', 'jira_base_url',
-    #                'https://your_jira_instance/')
-
-    # if not config.has_option('JIRA_ACCESS', 'jira_username'):
-    #     config.set('JIRA_ACCESS', 'jira_username', 'your_jira@username')
-
-    # if not config.has_option('JIRA_ACCESS', 'jira_api_token'):
-    #     config.set('JIRA_ACCESS', 'jira_api_token', 'your_jira_api_token')
-
-    # if not config.has_section('EXPORT_OPTIONS'):
-    #     config.add_section('EXPORT_OPTIONS')
-
-    # if not config.has_option('EXPORT_OPTIONS', 'export_path'):
-    #     config.set('EXPORT_OPTIONS', 'export_path', f"EXPORT\\")
-
-    # if not config.has_option('EXPORT_OPTIONS', 'save_to_html'):
-    #     config.set('EXPORT_OPTIONS', 'save_to_html', 'True')
-
-    # if not config.has_option('EXPORT_OPTIONS', 'save_to_pdf'):
-    #     config.set('EXPORT_OPTIONS', 'save_to_pdf', 'True')
-
-    # if not config.has_section('ISSUE_FILTER'):
-    #     config.add_section('ISSUE_FILTER')
-
-    # if not config.has_option('ISSUE_FILTER', 'jira_project'):
-    #     config.set('ISSUE_FILTER', 'jira_project', 'TEST')
-
+    # Going through loaded settings file, and adding missing Sections/options
     settings_changed = False
     for section in config_default.sections():
         for option in config_default.options(section):
@@ -85,10 +58,11 @@ def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigP
                     config.set(section, option,
                                config_default.get(section, option))
 
+    # Notifications if settings changed -> exit program
     if settings_changed:
         with open(SETTINGS_FILE, "w") as save_stream:
             config.write(save_stream)
-        print(f'Settings inside {SETTINGS_FILE}  were incorrect. \n {SETTINGS_FILE} was updated. \n Please rerun program after updating manually values in {SETTINGS_FILE}')
+        print(f'{SETTINGS_FILE} was created/updated with default values. \nPlease rerun program after updating manually values in {SETTINGS_FILE}')
         sys.exit(0)
 
     return config
@@ -97,11 +71,7 @@ def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigP
 def load_settings() -> configparser.ConfigParser:
     '''Loads settings.ini from file, validates it and returns ConfigParser object'''
     config = configparser.ConfigParser()
-    try:
-        with open(SETTINGS_FILE, "r") as load_strem:
-            config.read(SETTINGS_FILE)
-    except FileNotFoundError:
-        config.read(SETTINGS_FILE)
+    config.read(SETTINGS_FILE)
     config = validate_settings(config)
     return config
 
@@ -143,16 +113,16 @@ def generate_pdf_from_html_string(html_content: str, jira_issue_key: resources.I
     options = {
         'enable-local-file-access': True,
         'keep-relative-links': True,
-        'allow': getcwd(),
-        'cache-dir': getcwd(),
+        'allow': f'{getcwd()}\{path_exp}',
+        'cache-dir': f'{getcwd()}\{path_exp}',
         'encoding': 'utf-8',
-        'no-images': True
     }
     from_string(
         html_content, f"{path_exp}{jira_issue_key}.pdf", options=options)
 
 
 def populate_html_fields(jira_issue: resources.Issue) -> str:
+    '''Initial creation of html formatted string. Added Issue number, Name and description from jira. Markup from Jira converted by pypandoc'''
     summary = jira_issue.fields.summary
     description_raw = jira_issue.fields.description
     try:
@@ -163,7 +133,8 @@ def populate_html_fields(jira_issue: resources.Issue) -> str:
     return html_content
 
 
-def populate_html_comments(html_content: str, jira_issue: str, jira: JIRA) -> str:
+def populate_html_comments(html_content: str, jira_issue: resources.Issue, jira: JIRA) -> str:
+    ''' Appending Comments from JIRA (Created, Author, Comment body) to html formatted str.  Markup from Jira converted by pypandoc'''
     html_content += f'<h3>COMMENTS:</h3>'
     for c in jira_issue.fields.comment.comments:
         html_content += f'{jira.comment(jira_issue,c).created} <br> '
@@ -174,10 +145,11 @@ def populate_html_comments(html_content: str, jira_issue: str, jira: JIRA) -> st
     return html_content
 
 
-def populate_html_attachments(html_content: str, attachments: list[str], jira_issue: resources.Issue) -> str:
+def populate_html_attachments(html_content: str, attachments: list[str]) -> str:
+    '''Append links with attachments to html formatted str. Uses list of attachment.'''
     html_content += f'<h3>ATTACHMENTS:</h3>'
     for a in attachments:
-        html_content += f'<a href="{a}">{a}</a><br />'
+        html_content += f'<a href="{a}">{a}</a><br>'
     return html_content
 
 
@@ -185,8 +157,8 @@ def download_attachments(jira_issue: resources.Issue, path_exp: str) -> list[str
     '''Downloads attachment to EXPORT_PATH and returns list of filenames'''
     attachments = []
     for a in jira_issue.fields.attachment:
-        attachments.append(a.filename)
-        with open(f'{path_exp}{a.filename}', 'wb') as save_stream:
+        attachments.append(f'{jira_issue}-{a.filename}')
+        with open(f'{path_exp}{jira_issue}-{a.filename}', 'wb') as save_stream:
             save_stream.write(a.get())
         print(f'Attachment: {a} for issue {jira_issue} downloaded')
     return attachments
@@ -198,11 +170,13 @@ def convert_jira_wiki_markup(html_content: str) -> str:
 
 
 def save_to_html(html_content: str, filename: str, path_exp: str) -> None:
+    '''Save html formatted str to path_exp\filename'''
     with open(f'{path_exp}{filename}.html', 'w', encoding='utf-8') as save_stream:
         save_stream.write(html_content)
 
 
 def validate_export_path(path_exp: str) -> None:
+    '''Validates if folder for Exporting file exists and is not a file of the same name'''
     if (path.exists(path_exp)):
         if not path.isdir(path_exp):
             print('There is File with the same Name as Directory specified in settings. Remove the file or change settings.')
@@ -212,12 +186,46 @@ def validate_export_path(path_exp: str) -> None:
         print(f'Created export folder {path_exp}')
 
 
-def populate_html(issue, path_exp, jira):
+def populate_html(issue: resources.Issue, path_exp: str, jira: JIRA) -> str:
+    '''Creates and populates str with html formatted content from JIRA fields. returns str '''
     attachments = download_attachments(issue, path_exp)
     html_content = populate_html_fields(issue)
     html_content = populate_html_comments(html_content, issue, jira)
-    html_content = populate_html_attachments(html_content, attachments, issue)
+    html_content = populate_html_attachments(html_content, attachments)
     return html_content
+
+
+def convert_relative_to_absolute(html_str: str, path_exp: str, issue: resources.Issue, relative: bool) -> str:
+    '''Convert image links in html formatted str from relative path to absolute paths. Needed for properly saving pdf with images by pdfkit. As a PATH it uses export path defined in settings.ini.
+
+    Additionally adding Jira issue number to links.
+
+    Images are resized to width="300" height="200" '''
+
+    # Get the current working directory
+    current_directory = f'{getcwd()}/{path_exp}'
+
+    # Define a regular expression pattern to match image tags
+    img_pattern = re.compile(r'<img\s+[^>]*src="([^"]+)"[^>]*>')
+
+    # Replace relative image links with absolute paths depending on relative switch. Add issue number to filename
+    def replace_img(match):
+        img_src = match.group(1)
+        if not img_src.startswith(('http://', 'https://', 'file://')):
+            if relative:
+                abs_img_src = f'{issue}-{img_src}'
+            else:
+                abs_img_src = path.abspath(
+                    path.join(current_directory, f'{issue}-{img_src}'))
+
+            # migth provide later settings to change size of images
+            return f'<img src="{abs_img_src}" width="300" height="200">'
+        return match.group(0)
+
+    # Use the regular expression pattern to find and replace image tags
+    modified_html = img_pattern.sub(replace_img, html_str)
+
+    return modified_html
 
 
 def main():
@@ -241,6 +249,7 @@ def main():
     maxResults = 50
 
     while True:
+
         # Get the issues using the Jira module's search method
         result_list = find_issues(config.get(
             'ISSUE_FILTER', 'jira_project'), jira, startAt, maxResults)
@@ -251,13 +260,22 @@ def main():
 
         # Iterate through the results
         for issue in result_list:
+
+            # Generate formatted html str
             html_content = populate_html(issue, path_exp, jira)
 
+            # Save based on options values - formatting differently with convert_relative_to_absolute due to html working best with relative links and pdf with absolute ones (still need in both cases to modify images to have [Issue - filename] name)
             if config.getboolean('EXPORT_OPTIONS', 'save_to_html'):
-                save_to_html(html_content, issue, path_exp)
+
+                html_content_html = convert_relative_to_absolute(
+                    html_content, path_exp, issue, True)
+                save_to_html(html_content_html, issue, path_exp)
                 print(f"HTML generated for {issue}")
             if config.getboolean('EXPORT_OPTIONS', 'save_to_pdf'):
-                generate_pdf_from_html_string(html_content, issue, path_exp)
+                html_content_pdf = convert_relative_to_absolute(
+                    html_content, path_exp, issue, False)
+                generate_pdf_from_html_string(
+                    html_content_pdf, issue, path_exp)
                 print(f"PDF generated for {issue}")
 
         # Update the startAt for the next iteration
