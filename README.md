@@ -10,7 +10,9 @@ Small program for exporting issues from Jira to pdf or html
 ## Prerequisites
 
   wkhtmltopdf - https://wkhtmltopdf.org/
+  
   pandoc - https://pandoc.org/
+  
   JIRA API key - https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
