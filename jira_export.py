@@ -32,7 +32,7 @@ def is_server_reachable(server_url: str) -> None:
 
 
 def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigParser:
-    '''Validates settings.ini (loaded ConfigParser object), checks if all required fields are prsent, add missing entries and returns ConfigParser object'''
+    '''Validates settings.ini (loaded ConfigParser object), checks if all required fields are present, add missing entries and returns ConfigParser object'''
 
     # Creating default settings structure
     config_default = configparser.ConfigParser()
@@ -117,8 +117,14 @@ def generate_pdf_from_html_string(html_content: str, jira_issue_key: resources.I
         'cache-dir': f'{getcwd()}\{path_exp}',
         'encoding': 'utf-8',
     }
-    from_string(
-        html_content, f"{path_exp}{jira_issue_key}.pdf", options=options)
+    ### Validation of any errors that migth come from wkhtmltopdf. Current known issue if there are incorrect links in <img> - might happen if someone used Jira markup as plain text which is converted incorrectly to html markup
+    try:
+        from_string(
+            html_content, f"{path_exp}{jira_issue_key}.pdf", options=options)
+    except IOError:
+        with open(f"{path_exp}{jira_issue_key}-ERROR.pdf","w") as save_stream:
+            save_stream.write("ERROR")
+
 
 
 def populate_html_fields(jira_issue: resources.Issue) -> str:
@@ -157,10 +163,14 @@ def download_attachments(jira_issue: resources.Issue, path_exp: str) -> list[str
     '''Downloads attachment to EXPORT_PATH and returns list of filenames'''
     attachments = []
     for a in jira_issue.fields.attachment:
-        attachments.append(f'{jira_issue}-{a.filename}')
-        with open(f'{path_exp}{jira_issue}-{a.filename}', 'wb') as save_stream:
-            save_stream.write(a.get())
-        print(f'Attachment: {a} for issue {jira_issue} downloaded')
+        try:
+            attachments.append(f'{jira_issue}-{a.filename}')
+            with open(f'{path_exp}{jira_issue}-{a.filename}', 'wb') as save_stream:
+                save_stream.write(a.get())
+            print(f'Attachment: {a} for issue {jira_issue} downloaded')
+        except OSError:
+            with open(f'{path_exp}{jira_issue}-ATT_ERROR', 'wb') as save_stream:
+                save_stream.write(a.get())
     return attachments
 
 
