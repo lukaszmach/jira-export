@@ -8,7 +8,7 @@ import sys
 from jira import JIRA, client, resources
 from jira.exceptions import JIRAError
 
-from pdfkit import from_string
+from pdfkit import from_string, configuration
 import pypandoc
 
 SETTINGS_FILE = 'settings.ini'
@@ -44,7 +44,8 @@ def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigP
                 try:
                     config.set(section, option,
                                config_default.get(section, option))
-                except configparser.NoSectionError: # if no provided SECTION is found, creates one.
+                # if no provided SECTION is found, creates one.
+                except configparser.NoSectionError:
                     config.add_section(section)
                     config.set(section, option,
                                config_default.get(section, option))
@@ -127,7 +128,7 @@ def populate_html_comments(html_content: str, jira_issue: resources.Issue, jira:
     for c in jira_issue.fields.comment.comments:
         html_content += f'{jira.comment(jira_issue,c).created} <br> '
         html_content += f'{jira.comment(jira_issue,c).author.displayName} <br>'
-        comment_body_raw = jira.comment(jira_issue,c).body
+        comment_body_raw = jira.comment(jira_issue, c).body
         comment_body = convert_jira_wiki_markup(comment_body_raw)
         html_content += f'{comment_body} <br>'
     return html_content
@@ -220,12 +221,33 @@ def convert_relative_to_absolute(html_str: str, path_exp: str, issue: resources.
     return modified_html
 
 
+def validate_wkhtmltopdf_exists():
+    config = configuration()
+
+def validate_pandoc_exists():
+    pypandoc.get_pandoc_version()
+
+
 def main():
     try:
         config = load_settings()
     except ValueError:
         print(f'{SETTINGS_FILE} was created/updated with default values. \nPlease rerun program after updating manually values in {SETTINGS_FILE}')
         sys.exit(0)
+
+    try:
+        validate_wkhtmltopdf_exists()
+    except OSError:
+        print('\nProgram wkhtmltopdf was not found in system. Export to pdf will not be possibble. Settings were changed: save_to_pdf = False\n')
+        config.set('EXPORT_OPTIONS', 'save_to_pdf', 'False')
+
+    try:
+        validate_pandoc_exists()
+    except OSError:
+        print('\nProgram pandoc was not found in system. It is required for program to properly work\n')
+        sys.exit(0)
+        
+
 
     choice = input(
         f'Program will begin to export issues from JIRA based on values provided in {SETTINGS_FILE}. Continue? [y/n] :')
@@ -271,7 +293,7 @@ def main():
             print(
                 f"Failed to find provided project name: {config.get('ISSUE_FILTER', 'jira_project')}\n{error.response}\n{error.text}")
             sys.exit(1)
-        print(result_list)
+        
         # Break the loop if no more issues are returned
         if not result_list:
             break
