@@ -16,19 +16,10 @@ SETTINGS_FILE = 'settings.ini'
 
 def is_server_reachable(server_url: str) -> None:
     # Extract the hostname or IP address from the server URL
-    try:
-        hostname = server_url.split('//')[1].split('/')[0]
-    except IndexError:
-        print("Invalid server address format.")
-        sys.exit(1)
+    hostname = server_url.split('//')[1].split('/')[0]
 
-    try:
-        # Check if the hostname can be resolved to an IP address
-        socket.gethostbyname(hostname)
-
-    except socket.gaierror:
-        print(f"Failed to resolve the hostname: {hostname}")
-        sys.exit(1)
+    # Check if the hostname can be resolved to an IP address
+    socket.gethostbyname(hostname)
 
 
 def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigParser:
@@ -53,7 +44,7 @@ def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigP
                 try:
                     config.set(section, option,
                                config_default.get(section, option))
-                except configparser.NoSectionError:
+                except configparser.NoSectionError: # if no provided SECTION is found, creates one.
                     config.add_section(section)
                     config.set(section, option,
                                config_default.get(section, option))
@@ -62,8 +53,7 @@ def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigP
     if settings_changed:
         with open(SETTINGS_FILE, "w") as save_stream:
             config.write(save_stream)
-        print(f'{SETTINGS_FILE} was created/updated with default values. \nPlease rerun program after updating manually values in {SETTINGS_FILE}')
-        sys.exit(0)
+        raise ValueError
 
     return config
 
@@ -80,36 +70,29 @@ def authenticate_jira(jira_url: str, jira_username: str, jira_api_token: str) ->
     '''Set up JIRA object. Others method of authentication left commented (They are not tested)'''
 
     is_server_reachable(jira_url)
-    try:
-        return JIRA(
-            server=jira_url,
-            # basic_auth=("admin", "admin"),  # a username/password tuple [Not recommended]
-            # Jira Cloud: a username/token tuple
-            basic_auth=(jira_username, jira_api_token),
-            # token_auth="API token",  # Self-Hosted Jira (e.g. Server): the PAT token
-            # auth=("admin", "admin"),  # a username/password tuple for cookie auth [Not recommended]
-        )
-    except JIRAError as error:
-        print(
-            f"Failed to connect to Jira server: \nURL:{error.url}\n{error.response}\n{error.text}")
-        sys.exit(1)
+    jira = JIRA(
+        server=jira_url,
+        # basic_auth=("admin", "admin"),  # a username/password tuple [Not recommended]
+        # Jira Cloud: a username/token tuple
+        basic_auth=(jira_username, jira_api_token),
+        # token_auth="API token",  # Self-Hosted Jira (e.g. Server): the PAT token
+        # auth=("admin", "admin"),  # a username/password tuple for cookie auth [Not recommended]
+    )
+    jira.myself()  # to trigger jira authentication, without that even if connection is not succesfull it will not trigger any error
+    return jira
 
 
 def find_issues(jira_project_key: str, jira: JIRA, start_at: int, max_results: int) -> client.ResultList:
     '''Returns jira.client.ResultList based on provided JIRA instance and jQL containing Project key'''
 
-    try:
-        result_list = jira.search_issues(
-            f'project={jira_project_key}', startAt=start_at, maxResults=max_results)
-        return result_list
-    except JIRAError as error:
-        print(
-            f"Failed to find provided project name: {jira_project_key} \n{error.response}\n{error.text}")
-        sys.exit(1)
+    result_list = jira.search_issues(
+        f'project={jira_project_key}', startAt=start_at, maxResults=max_results)
+    return result_list
 
 
 def generate_pdf_from_html_string(html_content: str, jira_issue_key: resources.Issue, path_exp: str) -> None:
     '''Uses pdfkit to generate pdf to EXPORT_PATH from provided html_content string'''
+
     options = {
         'enable-local-file-access': True,
         'keep-relative-links': True,
@@ -117,14 +100,13 @@ def generate_pdf_from_html_string(html_content: str, jira_issue_key: resources.I
         'cache-dir': f'{getcwd()}\{path_exp}',
         'encoding': 'utf-8',
     }
-    ### Validation of any errors that migth come from wkhtmltopdf. Current known issue if there are incorrect links in <img> - might happen if someone used Jira markup as plain text which is converted incorrectly to html markup
+    # Validation of any errors that migth come from wkhtmltopdf. Current known issue if there are incorrect links in <img> - might happen if someone used Jira markup as plain text which is converted incorrectly to html markup
     try:
         from_string(
             html_content, f"{path_exp}{jira_issue_key}.pdf", options=options)
     except IOError:
-        with open(f"{path_exp}{jira_issue_key}-ERROR.pdf","w") as save_stream:
+        with open(f"{path_exp}{jira_issue_key}-ERROR.pdf", "w") as save_stream:
             save_stream.write("ERROR")
-
 
 
 def populate_html_fields(jira_issue: resources.Issue) -> str:
@@ -145,7 +127,7 @@ def populate_html_comments(html_content: str, jira_issue: resources.Issue, jira:
     for c in jira_issue.fields.comment.comments:
         html_content += f'{jira.comment(jira_issue,c).created} <br> '
         html_content += f'{jira.comment(jira_issue,c).author.displayName} <br>'
-        comment_body_raw = jira.comment(jira_issue, c).body
+        comment_body_raw = jira.comment(jira_issue,c).body
         comment_body = convert_jira_wiki_markup(comment_body_raw)
         html_content += f'{comment_body} <br>'
     return html_content
@@ -180,7 +162,7 @@ def convert_jira_wiki_markup(html_content: str) -> str:
 
 
 def save_to_html(html_content: str, filename: str, path_exp: str) -> None:
-    '''Save html formatted str to path_exp\filename'''
+    '''Save html formatted str to path_exp\\filename'''
     with open(f'{path_exp}{filename}.html', 'w', encoding='utf-8') as save_stream:
         save_stream.write(html_content)
 
@@ -189,8 +171,8 @@ def validate_export_path(path_exp: str) -> None:
     '''Validates if folder for Exporting file exists and is not a file of the same name'''
     if (path.exists(path_exp)):
         if not path.isdir(path_exp):
-            print('There is File with the same Name as Directory specified in settings. Remove the file or change settings.')
-            sys.exit(1)
+            raise FileExistsError
+
     else:
         mkdir(path_exp)
         print(f'Created export folder {path_exp}')
@@ -239,7 +221,11 @@ def convert_relative_to_absolute(html_str: str, path_exp: str, issue: resources.
 
 
 def main():
-    config = load_settings()
+    try:
+        config = load_settings()
+    except ValueError:
+        print(f'{SETTINGS_FILE} was created/updated with default values. \nPlease rerun program after updating manually values in {SETTINGS_FILE}')
+        sys.exit(0)
 
     choice = input(
         f'Program will begin to export issues from JIRA based on values provided in {SETTINGS_FILE}. Continue? [y/n] :')
@@ -249,10 +235,27 @@ def main():
         sys.exit(0)
 
     path_exp = config.get('EXPORT_OPTIONS', 'export_path')
-    validate_export_path(path_exp)
 
-    jira = authenticate_jira(config.get('JIRA_ACCESS', 'jira_base_url'), config.get(
-        'JIRA_ACCESS', 'jira_username'), config.get('JIRA_ACCESS', 'jira_api_token'))
+    try:
+        validate_export_path(path_exp)
+    except FileExistsError:
+        print('There is File with the same Name as Directory specified in settings. Remove the file or change settings.')
+        sys.exit(1)
+
+    try:
+        jira = authenticate_jira(config.get('JIRA_ACCESS', 'jira_base_url'), config.get(
+            'JIRA_ACCESS', 'jira_username'), config.get('JIRA_ACCESS', 'jira_api_token'))
+    except IndexError:
+        print("Incorrect url adress format")
+        sys.exit(1)
+    except socket.gaierror as error:
+        print(
+            f"Cannot connect to url. Check if url is correct in {SETTINGS_FILE}")
+        sys.exit(1)
+    except JIRAError as error:
+        print(
+            f"Failed to connect to Jira server: \nURL:{error.url}\n{error.response}\n{error.text}")
+        sys.exit(1)
 
     # Initialize startAt and maxResults
     startAt = 0
@@ -261,9 +264,14 @@ def main():
     while True:
 
         # Get the issues using the Jira module's search method
-        result_list = find_issues(config.get(
-            'ISSUE_FILTER', 'jira_project'), jira, startAt, maxResults)
-
+        try:
+            result_list = find_issues(config.get(
+                'ISSUE_FILTER', 'jira_project'), jira, startAt, maxResults)
+        except JIRAError as error:
+            print(
+                f"Failed to find provided project name: {config.get('ISSUE_FILTER', 'jira_project')}\n{error.response}\n{error.text}")
+            sys.exit(1)
+        print(result_list)
         # Break the loop if no more issues are returned
         if not result_list:
             break
