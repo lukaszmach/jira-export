@@ -224,6 +224,7 @@ def convert_relative_to_absolute(html_str: str, path_exp: str, issue: resources.
 def validate_wkhtmltopdf_exists():
     config = configuration()
 
+
 def validate_pandoc_exists():
     pypandoc.get_pandoc_version()
 
@@ -246,8 +247,6 @@ def main():
     except OSError:
         print('\nProgram pandoc was not found in system. It is required for program to properly work\n')
         sys.exit(0)
-        
-
 
     choice = input(
         f'Program will begin to export issues from JIRA based on values provided in {SETTINGS_FILE}. Continue? [y/n] :')
@@ -293,7 +292,7 @@ def main():
             print(
                 f"Failed to find provided project name: {config.get('ISSUE_FILTER', 'jira_project')}\n{error.response}\n{error.text}")
             sys.exit(1)
-        
+
         # Break the loop if no more issues are returned
         if not result_list:
             break

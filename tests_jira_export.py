@@ -304,23 +304,26 @@ def test_find_issues_is_called(jira_mock):
     )
     assert isinstance(result, j.client.ResultList)
 
+
 def test_populate_html_fields_description_filled():
     jira_issue_mock = MockIssue()
     jira_issue_mock.fields.summary = "Test Summary"
     jira_issue_mock.fields.description = "Test Description"
     result = j.populate_html_fields(jira_issue_mock)
-    expected=f'<h1>ISSUE1</h1><h2>Test Summary</h2><p>Test Description</p>\r\n'
+    expected = f'<h1>ISSUE1</h1><h2>Test Summary</h2><p>Test Description</p>\r\n'
     assert result == expected
+
 
 def test_populate_html_fields_description_empty():
     jira_issue_mock = MockIssue()
     jira_issue_mock.fields.summary = "Test Summary"
     jira_issue_mock.fields.description = None
     result = j.populate_html_fields(jira_issue_mock)
-    expected=f'<h1>ISSUE1</h1><h2>Test Summary</h2>DESCRIPTION EMPTY'
+    expected = f'<h1>ISSUE1</h1><h2>Test Summary</h2>DESCRIPTION EMPTY'
     assert result == expected
 
-def test_populate_html_comments(): #rewrite later to include test to multiple comments - problem with MOck - Jira setup
+
+def test_populate_html_comments():  # rewrite later to include test to multiple comments - problem with MOck - Jira setup
     jira_issue_mock = MockIssue()
     jira_mock = Mock(spec=j.JIRA)
     jira_mock.comment().created = '1'
@@ -330,7 +333,5 @@ def test_populate_html_comments(): #rewrite later to include test to multiple co
     convert_jira_wiki_markup_mock.return_value = "Formatted Comment Body"
     expected = "<h3>COMMENTS:</h3>1 <br> John <br>Formatted Comment Body <br>"
     with patch('jira_export.convert_jira_wiki_markup', convert_jira_wiki_markup_mock):
-        result =j.populate_html_comments('',jira_issue_mock, jira_mock)
+        result = j.populate_html_comments('', jira_issue_mock, jira_mock)
         assert result == expected
-
-
