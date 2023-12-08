@@ -2,11 +2,16 @@
 EXPORT/
 
 # ignore settings
-settings*
+settings*.ini
 
 # ignore build
 build
 *.spec
+dist
+*.egg-info/
 
-#ignore cache files
+# ignore cache files
 __pycache__
+
+# include example settings.ini file
+!/docs/settings.ini
