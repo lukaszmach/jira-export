@@ -20,10 +20,11 @@ def test_load_settings_nofile_is_file_generated(tmpdir):
 
 
 def test_load_settings_file_exists(tmpdir):
+    settings_default = j.Settings(save_to_html=False)
     config_default = j.configparser.ConfigParser()
     config_default['JIRA_ACCESS'] = {'jira_base_url': 'https://your_jira_instance/',
                                      'jira_username': 'your_jira@username',
-                                     'jira_api_token': 'yout_jira_api_token'}
+                                     'jira_api_token': 'your_jira_api_token'}
     config_default['EXPORT_OPTIONS'] = {'export_path': f"EXPORT\\",
                                         'save_to_html': False,
                                         'save_to_pdf': True}
@@ -32,7 +33,7 @@ def test_load_settings_file_exists(tmpdir):
         with open(j.SETTINGS_FILE, "w") as save_stream:
             config_default.write(save_stream)
         config = j.load_settings()
-        assert config == config_default
+        assert config == settings_default
 
 
 def test_jira_authentication_success():
@@ -83,22 +84,6 @@ def test_jira_authentication_failed_incorrect_server_adress():
             j.authenticate_jira(jira_url, username, api_token)
 
         assert exec_info.type == j.socket.gaierror
-
-
-def test_load_settings_file_exists(tmpdir):
-    config_default = j.configparser.ConfigParser()
-    config_default['JIRA_ACCESS'] = {'jira_base_url': 'https://your_jira_instance/',
-                                     'jira_username': 'your_jira@username',
-                                     'jira_api_token': 'yout_jira_api_token'}
-    config_default['EXPORT_OPTIONS'] = {'export_path': f"EXPORT\\",
-                                        'save_to_html': False,
-                                        'save_to_pdf': True}
-    config_default['ISSUE_FILTER'] = {'jira_project': "TEST"}
-    with tmpdir.as_cwd():
-        with open(j.SETTINGS_FILE, "w") as save_stream:
-            config_default.write(save_stream)
-        config = j.load_settings()
-        assert config == config_default
 
 
 class MockJira:
