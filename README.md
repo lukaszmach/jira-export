@@ -21,7 +21,7 @@ Small program for exporting issues from Jira to pdf or html.
 
   On the first run program will create settings.ini file where you can input all JIRA credentials (url, username, api token) and project you want to export.
 
-settings.ini:
+[settings.ini](docs/settings.ini):
 
 ```ini
 [JIRA_ACCESS]
@@ -60,12 +60,12 @@ For both html and pdf all issues are imported with following format
 - {Attachments}
   - Links to attachments locally downloaded.  
 
-html example of exported issue:
+[html example](docs/TEST-5.html) of exported issue:
 
 ![image](https://github.com/lukaszmach/jira-export/assets/149838491/b41deb78-f3a7-449c-894c-c815179dd194)
 
 
-pdf example of exported issue:
+[pdf example](docs/TEST-5.pdf) of exported issue:
 
 ![image](https://github.com/lukaszmach/jira-export/assets/149838491/93f28093-029f-4fc2-a3c0-5acec2e57137)
 
