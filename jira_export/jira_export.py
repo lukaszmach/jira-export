@@ -2,6 +2,7 @@ import configparser
 import re
 import socket
 import sys
+from dataclasses import dataclass
 from os import getcwd, mkdir, path
 
 import keyboard
@@ -11,6 +12,17 @@ from jira.exceptions import JIRAError
 from pdfkit import configuration, from_string
 
 SETTINGS_FILE = 'settings.ini'
+
+
+@dataclass
+class Settings:
+    jira_base_url: str = 'https://your_jira_instance/'
+    jira_username: str = 'your_jira@username'
+    jira_api_token: str = 'your_jira_api_token'
+    export_path: str = 'EXPORT\\'
+    save_to_html: bool = True
+    save_to_pdf: bool = True
+    jira_project: str = 'TEST'
 
 
 def is_server_reachable(server_url: str) -> None:
@@ -25,17 +37,19 @@ def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigP
     '''Validates settings.ini (loaded ConfigParser object), checks if all required fields are present, add missing entries and returns ConfigParser object'''
 
     # Creating default settings structure
+    settings = Settings()
     config_default = configparser.ConfigParser()
-    config_default['JIRA_ACCESS'] = {'jira_base_url': 'https://your_jira_instance/',
-                                     'jira_username': 'your_jira@username',
-                                     'jira_api_token': 'yout_jira_api_token'}
-    config_default['EXPORT_OPTIONS'] = {'export_path': f"EXPORT\\",
-                                        'save_to_html': True,
-                                        'save_to_pdf': True}
-    config_default['ISSUE_FILTER'] = {'jira_project': "TEST"}
+    config_default['JIRA_ACCESS'] = {'jira_base_url': settings.jira_base_url,
+                                     'jira_username': settings.jira_username,
+                                     'jira_api_token': settings.jira_api_token}
+    config_default['EXPORT_OPTIONS'] = {'export_path': settings.export_path,
+                                        'save_to_html': settings.save_to_html,
+                                        'save_to_pdf': settings.save_to_pdf}
+    config_default['ISSUE_FILTER'] = {'jira_project': settings.jira_project}
 
     # Going through loaded settings file, and adding missing Sections/options
     settings_changed = False
+
     for section in config_default.sections():
         for option in config_default.options(section):
             if not config.has_option(section, option):
@@ -49,21 +63,48 @@ def validate_settings(config: configparser.ConfigParser) -> configparser.ConfigP
                     config.set(section, option,
                                config_default.get(section, option))
 
+    # Validate if boolean options have proper values
+    section = 'EXPORT_OPTIONS'
+    option = ['save_to_html', 'save_to_pdf']
+
+    for opt in option:
+        try:
+            config.getboolean(section, opt)
+        except ValueError:
+            config.set(section, opt,
+                       config_default.get(section, opt))
+            settings_changed = True
+
     # Notifications if settings changed -> exit program
     if settings_changed:
         with open(SETTINGS_FILE, "w") as save_stream:
             config.write(save_stream)
         raise ValueError
-
     return config
 
 
-def load_settings() -> configparser.ConfigParser:
-    '''Loads settings.ini from file, validates it and returns ConfigParser object'''
+def load_settings_to_dataclass(config: configparser.ConfigParser) -> Settings:
+    '''Loads settings.ini to dataclass'''
+
+    settings = Settings()
+    settings.jira_base_url = config.get('JIRA_ACCESS', 'jira_base_url')
+    settings.jira_username = config.get('JIRA_ACCESS', 'jira_username')
+    settings.jira_api_token = config.get('JIRA_ACCESS', 'jira_api_token')
+    settings.export_path = config.get('EXPORT_OPTIONS', 'export_path')
+    settings.save_to_html = config.getboolean('EXPORT_OPTIONS', 'save_to_html')
+    settings.save_to_pdf = config.getboolean('EXPORT_OPTIONS', 'save_to_pdf')
+    settings.jira_project = config.get('ISSUE_FILTER', 'jira_project')
+    return settings
+
+
+def load_settings() -> Settings:
+    '''Loads settings.ini from file, validates it and returns Settings object'''
+
     config = configparser.ConfigParser()
     config.read(SETTINGS_FILE)
     config = validate_settings(config)
-    return config
+    settings = load_settings_to_dataclass(config)
+    return settings
 
 
 def authenticate_jira(jira_url: str, jira_username: str, jira_api_token: str) -> JIRA:
@@ -143,6 +184,7 @@ def populate_html_attachments(html_content: str, attachments: list[str]) -> str:
 
 def download_attachments(jira_issue: resources.Issue, path_exp: str) -> list[str]:
     '''Downloads attachment to EXPORT_PATH and returns list of filenames'''
+
     attachments = []
     for a in jira_issue.fields.attachment:
         try:
@@ -160,11 +202,13 @@ def download_attachments(jira_issue: resources.Issue, path_exp: str) -> list[str
 
 def convert_jira_wiki_markup(html_content: str) -> str:
     '''Uses pypandoc to convert JIRA markups to HTML'''
+
     return pypandoc.convert_text(html_content, 'html', format='jira')
 
 
 def save_to_html(html_content: str, filename: str, path_exp: str) -> None:
     '''Save html formatted str to path_exp\\filename'''
+
     file_path = path.join(path_exp, f'{filename}.html')
     with open(file_path, 'w', encoding='utf-8') as save_stream:
         save_stream.write(html_content)
@@ -172,6 +216,7 @@ def save_to_html(html_content: str, filename: str, path_exp: str) -> None:
 
 def validate_export_path(path_exp: str) -> None:
     '''Validates if folder for Exporting file exists and is not a file of the same name'''
+
     if (path.exists(path_exp)):
         if not path.isdir(path_exp):
             raise FileExistsError
@@ -183,6 +228,7 @@ def validate_export_path(path_exp: str) -> None:
 
 def populate_html(issue: resources.Issue, path_exp: str, jira: JIRA) -> str:
     '''Creates and populates str with html formatted content from JIRA fields. returns str '''
+
     attachments = download_attachments(issue, path_exp)
     html_content = populate_html_fields(issue)
     html_content = populate_html_comments(html_content, issue, jira)
@@ -224,25 +270,28 @@ def convert_relative_to_absolute(html_str: str, path_exp: str, issue: resources.
 
 
 def validate_wkhtmltopdf_exists():
+
     config = configuration()
 
 
 def validate_pandoc_exists():
+
     pypandoc.get_pandoc_version()
 
 
 def main():
+
     try:
-        config = load_settings()
-    except ValueError:
-        print(f'{SETTINGS_FILE} was created/updated with default values. \nPlease rerun program after updating manually values in {SETTINGS_FILE}')
+        settings = load_settings()
+    except ValueError as e:
+        print(f'{SETTINGS_FILE} was created/updated with default values. \nPlease rerun program after updating manually values in {SETTINGS_FILE} \n {e}')
         sys.exit(0)
 
     try:
         validate_wkhtmltopdf_exists()
     except OSError:
         print('\nProgram wkhtmltopdf was not found in system. Export to pdf will not be possibble. Settings were changed: save_to_pdf = False\n')
-        config.set('EXPORT_OPTIONS', 'save_to_pdf', 'False')
+        settings.save_to_pdf = False
 
     try:
         validate_pandoc_exists()
@@ -257,7 +306,8 @@ def main():
         print('Aborted')
         sys.exit(0)
 
-    path_exp = config.get('EXPORT_OPTIONS', 'export_path')
+    path_exp = settings.export_path
+    # config.get('EXPORT_OPTIONS', 'export_path')
 
     try:
         validate_export_path(path_exp)
@@ -266,8 +316,9 @@ def main():
         sys.exit(1)
 
     try:
-        jira = authenticate_jira(config.get('JIRA_ACCESS', 'jira_base_url'), config.get(
-            'JIRA_ACCESS', 'jira_username'), config.get('JIRA_ACCESS', 'jira_api_token'))
+        jira = authenticate_jira(
+            settings.jira_base_url, settings.jira_username, settings.jira_api_token)
+
     except IndexError:
         print("Incorrect url adress format")
         sys.exit(1)
@@ -288,11 +339,12 @@ def main():
 
         # Get the issues using the Jira module's search method
         try:
-            result_list = find_issues(config.get(
-                'ISSUE_FILTER', 'jira_project'), jira, startAt, maxResults)
+            result_list = find_issues(
+                settings.jira_project, jira, startAt, maxResults)
+            # config.get( 'ISSUE_FILTER', 'jira_project')
         except JIRAError as error:
             print(
-                f"Failed to find provided project name: {config.get('ISSUE_FILTER', 'jira_project')}\n{error.response}\n{error.text}")
+                f"Failed to find provided project name: {settings.jira_project}\n{error.response}\n{error.text}")
             sys.exit(1)
 
         # Break the loop if no more issues are returned
@@ -306,13 +358,15 @@ def main():
             html_content = populate_html(issue, path_exp, jira)
 
             # Save based on options values - formatting differently with convert_relative_to_absolute due to html working best with relative links and pdf with absolute ones (still need in both cases to modify images to have [Issue - filename] name)
-            if config.getboolean('EXPORT_OPTIONS', 'save_to_html'):
+
+            if settings.save_to_html:
 
                 html_content_html = convert_relative_to_absolute(
                     html_content, path_exp, issue, True)
                 save_to_html(html_content_html, issue, path_exp)
                 print(f"HTML generated for {issue}")
-            if config.getboolean('EXPORT_OPTIONS', 'save_to_pdf'):
+            if settings.save_to_pdf:
+
                 html_content_pdf = convert_relative_to_absolute(
                     html_content, path_exp, issue, False)
                 generate_pdf_from_html_string(
