@@ -96,16 +96,16 @@ def generate_pdf_from_html_string(html_content: str, jira_issue_key: resources.I
     options = {
         'enable-local-file-access': True,
         'keep-relative-links': True,
-        'allow': f'{getcwd()}\{path_exp}',
-        'cache-dir': f'{getcwd()}\{path_exp}',
+        'allow': path.join(getcwd(), path_exp),
+        'cache-dir': path.join(getcwd(), path_exp),
         'encoding': 'utf-8',
     }
     # Validation of any errors that migth come from wkhtmltopdf. Current known issue if there are incorrect links in <img> - might happen if someone used Jira markup as plain text which is converted incorrectly to html markup
     try:
         from_string(
-            html_content, f"{path_exp}{jira_issue_key}.pdf", options=options)
+            html_content, path.join(path_exp, f"{jira_issue_key}.pdf"), options=options)
     except IOError:
-        with open(f"{path_exp}{jira_issue_key}-ERROR.pdf", "w") as save_stream:
+        with open(path.join(path_exp, f"{jira_issue_key}-ERROR.pdf"), "w") as save_stream:
             save_stream.write("ERROR")
 
 
@@ -146,12 +146,14 @@ def download_attachments(jira_issue: resources.Issue, path_exp: str) -> list[str
     attachments = []
     for a in jira_issue.fields.attachment:
         try:
-            attachments.append(f'{jira_issue}-{a.filename}')
-            with open(f'{path_exp}{jira_issue}-{a.filename}', 'wb') as save_stream:
+            filename = f'{jira_issue}-{a.filename}'
+            filepath = path.join(path_exp, filename)
+            attachments.append(filename)
+            with open(filepath, 'wb') as save_stream:
                 save_stream.write(a.get())
             print(f'Attachment: {a} for issue {jira_issue} downloaded')
         except OSError:
-            with open(f'{path_exp}{jira_issue}-ATT_ERROR', 'wb') as save_stream:
+            with open(path.join(path_exp, f'{jira_issue}-ATT_ERROR'), 'wb') as save_stream:
                 save_stream.write(a.get())
     return attachments
 
@@ -163,7 +165,8 @@ def convert_jira_wiki_markup(html_content: str) -> str:
 
 def save_to_html(html_content: str, filename: str, path_exp: str) -> None:
     '''Save html formatted str to path_exp\\filename'''
-    with open(f'{path_exp}{filename}.html', 'w', encoding='utf-8') as save_stream:
+    file_path = path.join(path_exp, f'{filename}.html')
+    with open(file_path, 'w', encoding='utf-8') as save_stream:
         save_stream.write(html_content)
 
 
@@ -195,7 +198,7 @@ def convert_relative_to_absolute(html_str: str, path_exp: str, issue: resources.
     Images are resized to width="300" height="200" '''
 
     # Get the current working directory
-    current_directory = f'{getcwd()}/{path_exp}'
+    current_directory = path.join(getcwd(), path_exp)
 
     # Define a regular expression pattern to match image tags
     img_pattern = re.compile(r'<img\s+[^>]*src="([^"]+)"[^>]*>')
