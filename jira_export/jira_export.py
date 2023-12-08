@@ -16,6 +16,8 @@ SETTINGS_FILE = 'settings.ini'
 
 @dataclass
 class Settings:
+    '''Class for storing settings.'''
+
     jira_base_url: str = 'https://your_jira_instance/'
     jira_username: str = 'your_jira@username'
     jira_api_token: str = 'your_jira_api_token'
@@ -270,16 +272,19 @@ def convert_relative_to_absolute(html_str: str, path_exp: str, issue: resources.
 
 
 def validate_wkhtmltopdf_exists():
+    '''Checks if wkhtmltopdf is installed and if not raises OSError'''
 
     config = configuration()
 
 
 def validate_pandoc_exists():
+    '''Checks if pandoc is installed and if not raises OSError'''
 
     pypandoc.get_pandoc_version()
 
 
-def main():
+def initial_setup() -> Settings:
+    '''Initial setup of program. Checks and creates settings.ini file with default values and validates if wkhtmltopdf and pandoc are installed. Returns settings object'''
 
     try:
         settings = load_settings()
@@ -299,18 +304,14 @@ def main():
         print('\nProgram pandoc was not found in system. It is required for program to properly work\n')
         sys.exit(0)
 
-    choice = input(
-        f'Program will begin to export issues from JIRA based on values provided in {SETTINGS_FILE}. Continue? [y/n] :')
+    return settings
 
-    if not choice.lower() == 'y':
-        print('Aborted')
-        sys.exit(0)
 
-    path_exp = settings.export_path
-    # config.get('EXPORT_OPTIONS', 'export_path')
+def validate_jira(settings: Settings) -> JIRA:
+    '''Validates export path and authenticates to JIRA. Returns JIRA object'''
 
     try:
-        validate_export_path(path_exp)
+        validate_export_path(settings.export_path)
     except FileExistsError:
         print('There is File with the same Name as Directory specified in settings. Remove the file or change settings.')
         sys.exit(1)
@@ -330,6 +331,12 @@ def main():
         print(
             f"Failed to connect to Jira server: \nURL:{error.url}\n{error.response}\n{error.text}")
         sys.exit(1)
+
+    return jira
+
+
+def export_issues(settings: Settings, jira: JIRA) -> None:
+    '''Export issues from JIRA to HTML/PDF files based on settings.ini'''
 
     # Initialize startAt and maxResults
     startAt = 0
@@ -355,26 +362,42 @@ def main():
         for issue in result_list:
 
             # Generate formatted html str
-            html_content = populate_html(issue, path_exp, jira)
+            html_content = populate_html(issue, settings.export_path, jira)
 
             # Save based on options values - formatting differently with convert_relative_to_absolute due to html working best with relative links and pdf with absolute ones (still need in both cases to modify images to have [Issue - filename] name)
 
             if settings.save_to_html:
 
                 html_content_html = convert_relative_to_absolute(
-                    html_content, path_exp, issue, True)
-                save_to_html(html_content_html, issue, path_exp)
+                    html_content, settings.export_path, issue, True)
+                save_to_html(html_content_html, issue, settings.export_path)
                 print(f"HTML generated for {issue}")
             if settings.save_to_pdf:
 
                 html_content_pdf = convert_relative_to_absolute(
-                    html_content, path_exp, issue, False)
+                    html_content, settings.export_path, issue, False)
                 generate_pdf_from_html_string(
-                    html_content_pdf, issue, path_exp)
+                    html_content_pdf, issue, settings.export_path)
                 print(f"PDF generated for {issue}")
 
         # Update the startAt for the next iteration
         startAt += maxResults
+
+
+def main():
+
+    settings = initial_setup()
+
+    choice = input(
+        f'Program will begin to export issues from JIRA based on values provided in {SETTINGS_FILE}. Continue? [y/n] :')
+
+    if not choice.lower() == 'y':
+        print('Aborted')
+        sys.exit(0)
+
+    jira = validate_jira(settings)
+
+    export_issues(settings, jira)
 
     print("Press any key to exit...")
     keyboard.read_event(suppress=True)
