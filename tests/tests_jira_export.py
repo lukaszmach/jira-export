@@ -13,9 +13,11 @@ def test_generate_pdf_from_html_is_file_exist(tmpdir):
 
 
 def test_load_settings_nofile_is_file_generated(tmpdir):
+    settings_default = j.Settings()
     with tmpdir.as_cwd():
-        with pytest.raises(ValueError) as exc_info:
-            config = j.load_settings()
+        with pytest.raises(ValueError):
+            settings = j.load_settings()
+            assert settings == settings_default
         assert os.path.isfile(f'settings.ini')
 
 
@@ -32,114 +34,97 @@ def test_load_settings_file_exists(tmpdir):
     with tmpdir.as_cwd():
         with open(j.SETTINGS_FILE, "w") as save_stream:
             config_default.write(save_stream)
-        config = j.load_settings()
-        assert config == settings_default
+        settings = j.load_settings()
+    assert settings == settings_default
 
 
-def test_jira_authentication_success():
-    # Replace these with your test data
-    jira_url = 'https://your-mock-jira-server-url'
-    username = 'your-username'
-    api_token = 'your_api_token'
+@pytest.fixture
+def mock_fake_user():
 
-    # Simulate a complete successful Jira authentication response
     fake_user = {
-        'key': username,
+        'key': 'your-username',
         'displayName': 'John Doe',
-        'self': f'{jira_url}/rest/api/2/myself',
-        'versionNumbers': [1, 2, 3]  # Add a mock 'versionNumbers' field
+        'self': 'https://your-mock-jira-server-url/rest/api/2/myself',
+        'versionNumbers': [1, 2, 3]
+    }
+    return fake_user
+
+
+@pytest.fixture
+def mock_fake_credentials():
+    return {
+        'jira_base_url': 'https://your-mock-jira-server-url',
+        'jira_username': 'your-username',
+        'jira_api_token': 'your_api_token'
     }
 
+
+def test_jira_authentication_success(mock_fake_user, mock_fake_credentials):
+
     with patch('requests.Session.request') as mock_request:
-        mock_request.return_value.json.return_value = fake_user
+        mock_request.return_value.json.return_value = mock_fake_user
         mock_request.return_value.status_code = 200
 
         with patch('jira_export.jira_export.is_server_reachable') as mock_is_server_reachable:
             mock_is_server_reachable.return_value = None
-            jira = j.authenticate_jira(jira_url, username, api_token)
+            jira = j.authenticate_jira(
+                mock_fake_credentials['jira_base_url'], mock_fake_credentials['jira_username'], mock_fake_credentials['jira_api_token'])
             my_user = jira.myself()
 
         assert my_user['displayName'] == 'John Doe'
         assert type(jira) == j.JIRA
 
 
-def test_jira_authentication_failed_incorrect_server_adress():
-
-    jira_url = 'https://your_jira_instance/'
-    username = 'your-username'
-    api_token = 'your_api_token'
-
-    fake_user = {
-        'key': username,
-        'displayName': 'John Doe',
-        'self': f'{jira_url}/rest/api/2/myself',
-        'versionNumbers': [1, 2, 3]  # Add a mock 'versionNumbers' field
-    }
+def test_jira_authentication_failed_incorrect_server_adress(mock_fake_user, mock_fake_credentials):
 
     with patch('requests.Session.request') as mock_request:
-        mock_request.return_value.json.return_value = fake_user
+        mock_request.return_value.json.return_value = mock_fake_user
         mock_request.return_value.status_code = 400
 
         with pytest.raises(j.socket.gaierror,) as exec_info:
-            j.authenticate_jira(jira_url, username, api_token)
+            j.authenticate_jira(
+                mock_fake_credentials['jira_base_url'], mock_fake_credentials['jira_username'], mock_fake_credentials['jira_api_token'])
 
         assert exec_info.type == j.socket.gaierror
 
 
-class MockJira:
-    def myself(self):
-        pass
-
-
-def test_authenticate_jira_are_fuctions_called():
-
-    jira_url = 'https://your-mock-jira-server-url'
-    username = 'your-username'
-    api_token = 'your_api_token'
+def test_authenticate_jira_are_fuctions_called(mock_fake_credentials):
 
     with patch('jira_export.jira_export.is_server_reachable') as mock_is_server_reachable:
 
         with patch('jira_export.jira_export.JIRA', autospec=True) as mock_jira:
-            mock_jira_instance = MockJira()
+            mock_jira_instance = MagicMock()
             mock_jira.return_value = mock_jira_instance
 
-            j.authenticate_jira(jira_url, username, api_token)
+            j.authenticate_jira(
+                mock_fake_credentials['jira_base_url'], mock_fake_credentials['jira_username'], mock_fake_credentials['jira_api_token'])
 
-            mock_is_server_reachable.assert_called_once_with(jira_url)
+            mock_is_server_reachable.assert_called_once_with(
+                mock_fake_credentials['jira_base_url'])
 
             mock_jira.assert_called_once_with(
-                server=jira_url,
-                basic_auth=(username, api_token)
+                server=mock_fake_credentials['jira_base_url'],
+                basic_auth=(
+                    mock_fake_credentials['jira_username'], mock_fake_credentials['jira_api_token'])
             )
 
 
-def test_jira_authentication_failed_incorrect_server_adress_format():
+def test_jira_authentication_failed_incorrect_server_adress_format(mock_fake_user, mock_fake_credentials):
 
     jira_url = 'TEST1'
-    username = 'your-username'
-    api_token = 'your_api_token'
-
-    fake_user = {
-        'key': username,
-        'displayName': 'John Doe',
-        'self': f'{jira_url}/rest/api/2/myself',
-        'versionNumbers': [1, 2, 3]  # Add a mock 'versionNumbers' field
-    }
 
     with patch('requests.Session.request') as mock_request:
-        mock_request.return_value.json.return_value = fake_user
+        mock_request.return_value.json.return_value = mock_fake_user
         mock_request.return_value.status_code = 400
 
         with pytest.raises(IndexError) as exec_info:
-            j.authenticate_jira(jira_url, username, api_token)
+            j.authenticate_jira(
+                jira_url, mock_fake_credentials['jira_username'], mock_fake_credentials['jira_api_token'])
 
         assert exec_info.type == IndexError
 
 
-def test_jira_authentication_failed_incorrect_credentials():
-    jira_url = 'https://test.test.net/'
-    username = 'your-username'
-    api_token = 'your_api_token'
+def test_jira_authentication_failed_incorrect_credentials(mock_fake_credentials):
 
     with patch('jira_export.jira_export.JIRA') as mock_jira_class:
         mock_jira_instance = MagicMock()
@@ -150,7 +135,8 @@ def test_jira_authentication_failed_incorrect_credentials():
         with patch('jira_export.jira_export.is_server_reachable') as mock_is_server_reachable:
 
             with pytest.raises(j.JIRAError) as exec_info:
-                j.authenticate_jira(jira_url, username, api_token)
+                j.authenticate_jira(
+                    mock_fake_credentials['jira_base_url'], mock_fake_credentials['jira_username'], mock_fake_credentials['jira_api_token'])
 
             assert exec_info.type == j.JIRAError
             assert 'JIRA authentication failed' in str(exec_info.value)
@@ -212,48 +198,48 @@ class MockIssue:
 
 
 @pytest.fixture
-def mock_jira_issue_good_files():
+def mock_jira_issue_valid_files():
     attachment1 = MockAttachment('file1.txt', b'content1')
     attachment2 = MockAttachment('file2.txt', b'content2')
     return MockIssue(attachments=[attachment1, attachment2])
 
 
 @pytest.fixture
-def mock_jira_issue_bad_files():
+def mock_jira_issue_invalid_files():
     attachment1 = MockAttachment('?!?/?!', b'content1')
     attachment2 = MockAttachment('file2.txt', b'content2')
     return MockIssue(attachments=[attachment1, attachment2])
 
 
-def test_download_attachments_validate_files_and_contents_goodfiles(tmpdir, mock_jira_issue_good_files):
+def test_download_attachments_validate_files_and_contents_goodfiles(tmpdir, mock_jira_issue_valid_files):
     path_exp = 'EXP/'
     with tmpdir.as_cwd():
         os.mkdir(path_exp)
         attachments = j.download_attachments(
-            mock_jira_issue_good_files, path_exp)
+            mock_jira_issue_valid_files, path_exp)
 
         expected_filenames = [
-            f'{mock_jira_issue_good_files}-file1.txt', f'{mock_jira_issue_good_files}-file2.txt']
+            f'{mock_jira_issue_valid_files}-file1.txt', f'{mock_jira_issue_valid_files}-file2.txt']
         for attachment, expected_filename in zip(attachments, expected_filenames):
             assert attachment == expected_filename
 
-        for attachment in mock_jira_issue_good_files.fields.attachment:
-            attachment_path = f'{path_exp}{mock_jira_issue_good_files}-{attachment.filename}'
+        for attachment in mock_jira_issue_valid_files.fields.attachment:
+            attachment_path = f'{path_exp}{mock_jira_issue_valid_files}-{attachment.filename}'
             with open(attachment_path, 'rb') as file:
                 assert file.read() == attachment.content
 
 
-def test_download_attachments_validate_files_and_contents_bad_files(tmpdir, mock_jira_issue_bad_files):
+def test_download_attachments_validate_files_and_contents_bad_files(tmpdir, mock_jira_issue_invalid_files):
     path_exp = 'EXP/'
     with tmpdir.as_cwd():
         os.mkdir(path_exp)
         attachments = j.download_attachments(
-            mock_jira_issue_bad_files, path_exp)
+            mock_jira_issue_invalid_files, path_exp)
 
         expected_filenames = [
-            f'{mock_jira_issue_bad_files}-ATT_ERROR', f'{mock_jira_issue_bad_files}-file2.txt']
+            f'{mock_jira_issue_invalid_files}-ATT_ERROR', f'{mock_jira_issue_invalid_files}-file2.txt']
         expected_attachments = [
-            f'{mock_jira_issue_bad_files}-?!?/?!', f'{mock_jira_issue_bad_files}-file2.txt']
+            f'{mock_jira_issue_invalid_files}-?!?/?!', f'{mock_jira_issue_invalid_files}-file2.txt']
         for expected_filename in expected_filenames:
             assert os.path.isfile(f"{path_exp}{expected_filename}")
         for expected_attachment in expected_attachments:
@@ -272,13 +258,8 @@ def test_convert_jira_wiki_markup(html_source, html_expected):
     assert html_processed == html_expected
 
 
-@pytest.fixture
-def jira_mock(mocker):
-    return mocker.Mock()
-
-
-def test_find_issues_is_called(jira_mock):
-
+def test_find_issues_is_called():
+    jira_mock = Mock(spec=j.JIRA)
     jira_project_key = "YOUR_PROJECT_KEY"
     start_at = 0
     max_results = 10
@@ -293,8 +274,6 @@ def test_find_issues_is_called(jira_mock):
 
 def test_populate_html_fields_description_filled():
     jira_issue_mock = MockIssue()
-    jira_issue_mock.fields.summary = "Test Summary"
-    jira_issue_mock.fields.description = "Test Description"
     result = j.populate_html_fields(jira_issue_mock)
     expected = f'<h1>ISSUE1</h1><h2>Test Summary</h2><p>Test Description</p>\r\n'
     assert result == expected
@@ -302,22 +281,40 @@ def test_populate_html_fields_description_filled():
 
 def test_populate_html_fields_description_empty():
     jira_issue_mock = MockIssue()
-    jira_issue_mock.fields.summary = "Test Summary"
     jira_issue_mock.fields.description = None
     result = j.populate_html_fields(jira_issue_mock)
     expected = f'<h1>ISSUE1</h1><h2>Test Summary</h2>DESCRIPTION EMPTY'
     assert result == expected
 
 
-def test_populate_html_comments():  # rewrite later to include test to multiple comments - problem with MOck - Jira setup
+def test_populate_html_comments():
     jira_issue_mock = MockIssue()
-    jira_mock = Mock(spec=j.JIRA)
-    jira_mock.comment().created = '1'
-    jira_mock.comment().author.displayName = 'John'
-    jira_issue_mock.fields.comment.comments = ['comment1']
-    convert_jira_wiki_markup_mock = Mock()
-    convert_jira_wiki_markup_mock.return_value = "Formatted Comment Body"
-    expected = "<h3>COMMENTS:</h3>1 <br> John <br>Formatted Comment Body <br>"
-    with patch('jira_export.jira_export.convert_jira_wiki_markup', convert_jira_wiki_markup_mock):
-        result = j.populate_html_comments('', jira_issue_mock, jira_mock)
-        assert result == expected
+    jira_mock = Mock()
+
+    comment_1 = Mock()
+    comment_1.created = '1'
+    comment_1.author.displayName = 'John'
+    comment_1.body = 'Comment Body 1'
+
+    comment_2 = Mock()
+    comment_2.created = '2'
+    comment_2.author.displayName = 'John2'
+    comment_2.body = 'Comment Body 2'
+
+    jira_issue_mock.fields.comment.comments = [comment_1, comment_2]
+
+    # Mimicking jira.comment() behavior
+    def jira_comment_side_effect(issue, comment):
+        if comment == comment_1:
+            return comment_1
+        elif comment == comment_2:
+            return comment_2
+
+    jira_mock.comment.side_effect = jira_comment_side_effect
+
+    expected = (
+        '<h3>COMMENTS:</h3>1 <br> John <br><p>Comment Body 1</p>\r\n <br>2 <br> John2 <br><p>Comment Body 2</p>\r\n <br>'
+    )
+
+    result = j.populate_html_comments('', jira_issue_mock, jira_mock)
+    assert result == expected

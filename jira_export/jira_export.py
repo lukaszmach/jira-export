@@ -168,8 +168,8 @@ def populate_html_comments(html_content: str, jira_issue: resources.Issue, jira:
     ''' Appending Comments from JIRA (Created, Author, Comment body) to html formatted str.  Markup from Jira converted by pypandoc'''
     html_content += f'<h3>COMMENTS:</h3>'
     for c in jira_issue.fields.comment.comments:
-        html_content += f'{jira.comment(jira_issue,c).created} <br> '
-        html_content += f'{jira.comment(jira_issue,c).author.displayName} <br>'
+        html_content += f'{jira.comment(jira_issue, c).created} <br> '
+        html_content += f'{jira.comment(jira_issue, c).author.displayName} <br>'
         comment_body_raw = jira.comment(jira_issue, c).body
         comment_body = convert_jira_wiki_markup(comment_body_raw)
         html_content += f'{comment_body} <br>'
